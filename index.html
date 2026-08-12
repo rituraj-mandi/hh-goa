@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hacker House Goa 2026 — Builder ID Generator</title>
+
+<!-- ============================================================
+     ⚠️ BEFORE DEPLOY: replace SITE_URL below with your real
+     production URL (e.g. https://hhgoa-id-generator.vercel.app)
+     wherever it appears in this file. X/Slack/etc need an
+     ABSOLUTE url to fetch the preview image — relative paths
+     will render a blank link-share card.
+     ============================================================ -->
+<meta name="description" content="Upload a photo, get your official Hacker House Goa 2026 builder card in seconds. Download it or share straight to X.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Hacker House Goa 2026 — Builder ID Generator">
+<meta property="og:description" content="Upload a photo, get your official builder card in seconds. Share with #FrameInGoa.">
+<meta property="og:image" content="SITE_URL/assets/og-preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="1500">
+<meta property="og:url" content="SITE_URL/">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Hacker House Goa 2026 — Builder ID Generator">
+<meta name="twitter:description" content="Upload a photo, get your official builder card in seconds. Share with #FrameInGoa.">
+<meta name="twitter:image" content="SITE_URL/assets/og-preview.png">
+
+<link rel="icon" href="assets/goa_hindi.svg" type="image/svg+xml">
+<meta name="theme-color" content="#052213">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500;0,6..96,600;0,6..96,700;0,6..96,800&family=Outfit:wght@400;500;600;700;800&family=Victor+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="scene" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <img src="assets/wordmark.svg" alt="Hacker House Goa 2026" class="wordmark" width="112" height="98">
+    <div class="masthead-copy">
+      <h1>Builder ID Generator</h1>
+      <p>247 builders. One beach. Make your pass.</p>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <!-- ===================== Controls ===================== -->
+    <section class="panel controls" aria-label="Card details">
+
+      <div class="field">
+        <span class="field-label">Photo</span>
+
+        <div class="uploader" id="uploader">
+          <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" hidden>
+
+          <label for="fileInput" class="drop" id="dropLabel">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M3 15c0 2.8 0 4.2.88 5.12C4.76 21 6.17 21 9 21h6c2.83 0 4.24 0 5.12-.88C21 19.24 21 17.83 21 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Upload a photo</span>
+            <small>JPG, PNG, or iPhone HEIC — any crop</small>
+          </label>
+
+          <div class="reposition" id="repositionUI" hidden>
+            <div class="reposition-row">
+              <label for="zoomRange">Zoom</label>
+              <input type="range" id="zoomRange" min="100" max="260" value="100" step="1" aria-label="Zoom photo">
+              <button type="button" id="recenterBtn" class="btn-ghost">Recenter</button>
+            </div>
+            <p class="help">Drag the photo in the preview to reposition it.</p>
+          </div>
+
+          <p class="status" id="statusMsg" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="nameInput" class="field-label">Name</label>
+        <input type="text" id="nameInput" placeholder="Satoshi Nakamoto" autocomplete="name" maxlength="26">
+      </div>
+
+      <div class="field">
+        <label for="roleInput" class="field-label">Stack / role</label>
+        <input type="text" id="roleInput" placeholder="Fullstack engineer" autocomplete="off" maxlength="30">
+      </div>
+
+      <div class="field">
+        <span class="field-label">Builder title</span>
+        <div class="title-row">
+          <span class="title-chip" id="titleChip">—</span>
+          <button type="button" id="rerollBtn" class="btn-ghost" aria-label="Reroll builder title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7m4.5-5.5L22 17l-5.5 5.5L11 17l5.5-5.5Z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="downloadBtn" class="btn btn-primary" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Download
+        </button>
+        <button type="button" id="shareBtn" class="btn btn-x" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.47l8.6-9.83L0 1.15h7.59l5.24 6.93Zm-1.29 19.5h2.04L6.49 3.24H4.3Z"/></svg>
+          Share to X
+        </button>
+      </div>
+    </section>
+
+    <!-- ===================== Preview ===================== -->
+    <section class="panel preview" aria-label="Card preview">
+      <div class="card-frame" id="cardFrame">
+        <canvas id="idCanvas" width="1080" height="1350" aria-label="Generated builder ID card preview"></canvas>
+        <div class="empty" id="emptyState">
+          <span>Your card appears here</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span>Built for Hacker House Goa 2026 · Oct 28–31</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
