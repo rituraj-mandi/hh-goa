@@ -1,16 +1,12 @@
 'use strict';
 
-/* =========================================================================
-   Hacker House Goa 2026 — Builder ID Generator
-   ========================================================================= */
-
 const BRAND = {
   ink: '#07140D',
   green: '#0B6839',
-  greenDeep: '#1A4A31', // dark green for header
+  greenDeep: '#1A4A31',
   yellow: '#FEE101',
   pink: '#FF0080',
-  sand: '#F4F5F7', // very light gray body
+  sand: '#F4F5F7',
   gold: '#C6A152',
   blueText: '#1B365D',
   bluePill: '#4A7C94',
@@ -27,40 +23,31 @@ const TITLES = [
   'Ships In Prod', 'Rubber Duck Whisperer',
 ];
 
-// Design-space card dimensions (all drawing math happens in these units;
-// the canvas backing store is supersampled at EXPORT_SCALE for crisp output).
-// Landscape credit-card-style badge, ~1.6:1.
 const CARD_W = 1600;
 const CARD_H = 1000;
 const EXPORT_SCALE = 2;
 const HEADER_H = 216;
 
-// Photo frame geometry within the card (design units).
 const FRAME = { x: 96, y: 286, w: 360, h: 360, r: 16 };
 
-const SITE_URL = 'https://hhgoa-id-generator.vercel.app'; // ⚠️ update after deploy
+const SITE_URL = 'https://hhgoa-bid.vercel.app';
 const HASHTAG = '#FrameInGoa';
 
-/* ---------------------------------------------------------------------
-   State
-   --------------------------------------------------------------------- */
 const state = {
-  source: null,        // decoded image (ImageBitmap | HTMLCanvasElement | HTMLImageElement)
+  source: null,
   srcW: 0, srcH: 0,
-  fx: 0.5, fy: 0.5,     // focal point within source image, 0..1
-  zoom: 1,              // 1 = tightest cover fit, up to 2.6
+  fx: 0.5, fy: 0.5,
+  zoom: 1,
   idCode: null,
   title: pickTitle(),
   dragging: false,
   lastPointer: null,
   fontsReady: false,
-  logo: null,           // wordmark.svg image
-  scene: null,          // decorative linework image
+  logo: null,
+  scene: null,
+  qr: null,
 };
 
-/* ---------------------------------------------------------------------
-   DOM refs
-   --------------------------------------------------------------------- */
 const $ = (id) => document.getElementById(id);
 
 const fileInput = $('fileInput');
@@ -84,25 +71,22 @@ const ctx = canvas.getContext('2d');
 const emptyState = $('emptyState');
 const toastEl = $('toast');
 
-/* ---------------------------------------------------------------------
-   Boot
-   --------------------------------------------------------------------- */
 init();
 
 async function init() {
   titleChip.textContent = `< ${state.title} />`;
   setCanvasBackingStore();
 
-  loadFonts(); // fire and forget; drawCard() re-checks readiness before painting text
+  loadFonts();
   state.logo = await loadImage('assets/word.png').catch(() => null);
   state.scene = await loadImage('assets/scene-linework.png').catch(() => null);
+  state.qr = await loadImage('assets/qr.png').catch(() => null);
 
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
     if (file) handleNewPhoto(file);
   });
 
-  // Drag-and-drop straight onto the upload label.
   ['dragover', 'dragenter'].forEach((evt) =>
     dropLabel.addEventListener(evt, (e) => { e.preventDefault(); dropLabel.style.borderColor = BRAND.yellow; })
   );
@@ -154,7 +138,7 @@ async function loadFonts() {
     ];
     await Promise.all(specs.map((f) => document.fonts.load(f)));
     await document.fonts.ready;
-  } catch (_) { /* non-fatal — canvas will fall back to system fonts */ }
+  } catch (_) { }
   state.fontsReady = true;
   if (state.source) drawCard();
 }
@@ -168,10 +152,6 @@ function loadImage(src) {
   });
 }
 
-/* ---------------------------------------------------------------------
-   Photo pipeline — handles jpg/png/webp/HEIC, corrects EXIF rotation,
-   downsizes huge phone photos, and resets crop state per upload.
-   --------------------------------------------------------------------- */
 async function handleNewPhoto(file) {
   if (!isLikelyImage(file)) {
     setStatus('That file type isn\u2019t supported — try a JPG, PNG, or HEIC photo.', 'error');
@@ -233,12 +213,10 @@ async function decodeImageFile(file) {
     }
   }
 
-  // Preferred path: createImageBitmap auto-corrects EXIF orientation, which
-  // handles the classic "phone photo comes out sideways" bug.
   if (window.createImageBitmap) {
     try {
       return await createImageBitmap(workingFile, { imageOrientation: 'from-image' });
-    } catch (_) { /* fall through to <img> path below */ }
+    } catch (_) { }
   }
 
   return await new Promise((resolve, reject) => {
@@ -262,8 +240,6 @@ function loadScriptOnce(src) {
   return _scriptCache[src];
 }
 
-// Downscale very large source photos before they ever touch the drawing
-// canvas — keeps things fast and avoids mobile memory crashes.
 async function capToMaxDimension(imageLike, maxDim) {
   const w = imageLike.width, h = imageLike.height;
   const longest = Math.max(w, h);
@@ -277,11 +253,6 @@ async function capToMaxDimension(imageLike, maxDim) {
   return { image: off, w: nw, h: nh };
 }
 
-/* ---------------------------------------------------------------------
-   Drag-to-reposition — pointer-based, clamped so the frame never shows
-   empty space. This is what lets an off-center or oddly-cropped phone
-   photo still end up looking intentional.
-   --------------------------------------------------------------------- */
 function bindDragToReposition() {
   canvas.addEventListener('pointerdown', (e) => {
     if (!state.source) return;
@@ -298,7 +269,6 @@ function bindDragToReposition() {
     const dyCss = e.clientY - state.lastPointer.y;
     state.lastPointer = { x: e.clientX, y: e.clientY };
 
-    // CSS px -> design-space px (canvas is displayed at CARD_W wide, CSS-scaled)
     const cssToDesign = CARD_W / rect.width;
     const scale = coverScale(FRAME.w, FRAME.h, state.srcW, state.srcH) * state.zoom;
 
@@ -323,8 +293,6 @@ function coverScale(frameW, frameH, imgW, imgH) {
   return Math.max(frameW / imgW, frameH / imgH);
 }
 
-// Returns the source rectangle to draw from, given the current focal point
-// and zoom, clamped so it never runs past the source image's edges.
 function computeCrop(frameW, frameH, imgW, imgH, zoom, fx, fy) {
   const scale = coverScale(frameW, frameH, imgW, imgH) * zoom;
   const sW = frameW / scale;
@@ -338,9 +306,6 @@ function computeCrop(frameW, frameH, imgW, imgH, zoom, fx, fy) {
 
 function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
 
-/* ---------------------------------------------------------------------
-   Rendering
-   --------------------------------------------------------------------- */
 function drawCard() {
   if (!state.source) return;
 
@@ -348,7 +313,6 @@ function drawCard() {
   ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0);
   ctx.clearRect(0, 0, CARD_W, CARD_H);
 
-  // Global clip so the downloaded image has transparent rounded corners
   ctx.save();
   roundedRectPath(0, 0, CARD_W, CARD_H, 48);
   ctx.clip();
@@ -359,21 +323,19 @@ function drawCard() {
   drawPhoto();
   drawInfo();
   drawFooter();
-  
-  ctx.restore(); // remove clip
+
+  ctx.restore();
 
   drawOuterBorder();
 
   ctx.restore();
 }
 
-/* Cream card body (brand sand tone, not stock white) */
 function drawBody() {
   ctx.fillStyle = BRAND.sand;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 }
 
-/* Dark green header band carrying the real logo lockup */
 function drawHeader() {
   const g = ctx.createLinearGradient(0, 0, CARD_W, HEADER_H);
   g.addColorStop(0, '#103322');
@@ -382,7 +344,7 @@ function drawHeader() {
   ctx.fillRect(0, 0, CARD_W, HEADER_H);
 
   if (state.logo && state.logo.complete && state.logo.naturalWidth) {
-    const lh = 70; 
+    const lh = 70;
     const lw = lh * (state.logo.naturalWidth / state.logo.naturalHeight);
     ctx.drawImage(state.logo, 70, (HEADER_H - lh) / 2, lw, lh);
   } else {
@@ -401,25 +363,20 @@ function drawHeader() {
   ctx.fillText('2026', CARD_W - 70, HEADER_H / 2 + 10);
 }
 
-/* Decorative linework derived from the event's own beach illustration —
-   confined to the right-hand third so it never fights with the copy. */
 function drawScene() {
   if (!(state.scene && state.scene.complete && state.scene.naturalWidth)) return;
-  // Span across the whole bottom
   const sceneW = CARD_W, sceneH = sceneW * (state.scene.naturalHeight / state.scene.naturalWidth);
   ctx.save();
   ctx.globalAlpha = 0.6;
   ctx.drawImage(state.scene, 0, CARD_H - sceneH, sceneW, sceneH);
   ctx.restore();
 
-  // Draw location tag at bottom right
   ctx.textAlign = 'left';
   const lx = 1250, ly = 900;
   drawPin(lx, ly - 20, 16, BRAND.blueText);
   ctx.font = font(800, 34, 'sans');
   ctx.fillStyle = BRAND.blueText;
   ctx.fillText('GOA - INDIA', lx + 36, ly);
-  // ctx.fillText('2026', lx + 116, ly + 32);
 }
 
 function drawPin(cx, cy, r, color) {
@@ -441,7 +398,7 @@ function drawPhoto() {
   const { x, y, w, h, r } = FRAME;
   const pad = 16;
   const outX = x - pad, outY = y - pad, outW = w + pad*2, outH = h + pad*2, outR = 24;
-  
+
   const { sx, sy, sW, sH } = computeCrop(w, h, state.srcW, state.srcH, state.zoom, state.fx, state.fy);
 
   ctx.save();
@@ -473,12 +430,11 @@ function drawPhoto() {
   ctx.stroke();
   ctx.restore();
 
-  // User icon
   ctx.save();
   const iconR = 28;
   const iconX = outX + outW - 12 - iconR;
   const iconY = outY + outH - 12 - iconR;
-  
+
   ctx.shadowColor = 'rgba(0,0,0,0.15)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 4;
@@ -487,7 +443,7 @@ function drawPhoto() {
   ctx.fillStyle = '#E8EDF2';
   ctx.fill();
   ctx.restore();
-  
+
   ctx.beginPath();
   ctx.arc(iconX, iconY, iconR, 0, Math.PI * 2);
   ctx.lineWidth = 2;
@@ -504,8 +460,31 @@ function drawPhoto() {
 }
 
 function drawInfo() {
-  const left = FRAME.x + FRAME.w + 40; 
+  const left = FRAME.x + FRAME.w + 40;
   ctx.textAlign = 'left';
+
+  const pillX = left, pillY = 460, pillW = 460, pillH = 74;
+
+  if (state.qr && state.qr.complete) {
+    const qrSize = 220;
+    const qrX = pillX + pillW + 50;
+    const qrY = pillY - 70;
+
+    ctx.save();
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 6;
+    roundedRectPath(qrX, qrY, qrSize, qrSize, 12);
+    ctx.fillStyle = '#FFF';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    roundedRectPath(qrX, qrY, qrSize, qrSize, 12);
+    ctx.clip();
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(state.qr, qrX, qrY, qrSize, qrSize);
+    ctx.restore();
+  }
 
   ctx.font = font(500, 22, 'sans');
   ctx.fillStyle = BRAND.grayText;
@@ -521,8 +500,7 @@ function drawInfo() {
   ctx.fillText('DESIGNATION', left, 446);
 
   const role = roleInput.value.trim();
-  const pillX = left, pillY = 460, pillW = 460, pillH = 74;
-  
+
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.15)';
   ctx.shadowBlur = 10;
@@ -539,7 +517,7 @@ function drawInfo() {
   ctx.fillStyle = pg;
   ctx.fill();
   drawCircuitTexture(pillX, pillY, pillW, pillH);
-  
+
   ctx.font = font(700, 36, 'sans');
   ctx.fillStyle = '#2B2B2B';
   let dRole = role;
@@ -548,12 +526,12 @@ function drawInfo() {
   ctx.fillText(dRole, pillX + 24, pillY + pillH / 2 + 12);
 
   const idY = 586;
-  
+
   const idW = 260;
   roundedRectPath(left, idY, idW, 76, 12);
   ctx.fillStyle = BRAND.bluePill;
   ctx.fill();
-  
+
   ctx.font = font(500, 20, 'sans');
   ctx.fillStyle = '#A3C6D9';
   ctx.fillText('ID NO.', left + 20, idY + 30);
@@ -599,8 +577,7 @@ function drawCalendar(x, y, size, color) {
   ctx.lineWidth = 3;
   roundedRectPath(x, y + size * 0.15, size, size * 0.85, 6);
   ctx.stroke();
-  
-  // top loops
+
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -609,15 +586,13 @@ function drawCalendar(x, y, size, color) {
   ctx.moveTo(x + size * 0.75, y);
   ctx.lineTo(x + size * 0.75, y + size * 0.3);
   ctx.stroke();
-  
-  // horizontal line
+
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(x, y + size * 0.45);
   ctx.lineTo(x + size, y + size * 0.45);
   ctx.stroke();
-  
-  // dots
+
   ctx.fillStyle = color;
   const dotR = 2.5;
   for (let row = 0; row < 2; row++) {
@@ -631,9 +606,8 @@ function drawCalendar(x, y, size, color) {
 }
 
 function drawFooter() {
-  const barcodeY = 850; // Align with GOA-INDIA text block
-  
-  // Builder title chip midway between profile pic and barcode
+  const barcodeY = 850;
+
   const label = `< ${state.title} />`;
   ctx.font = font(800, 40, 'mono');
   ctx.fillStyle = BRAND.grayText;
@@ -645,7 +619,6 @@ function drawFooter() {
   ctx.font = font(500, 22, 'mono');
   ctx.fillStyle = '#1B365D';
   ctx.textAlign = 'left';
-  // Pulling barcode string right below the barcode image
   ctx.fillText(digitStringFor(state.idCode), 120, barcodeY + 85);
 }
 
@@ -681,22 +654,17 @@ function hashSeed(str) {
 }
 
 function drawOuterBorder() {
-  // Thick gold border
-  ctx.strokeStyle = '#C6A152'; // Gold
+  ctx.strokeStyle = '#C6A152';
   ctx.lineWidth = 8;
   roundedRectPath(3, 3, CARD_W - 6, CARD_H - 6, 50);
   ctx.stroke();
-  
-  // Inner thin border
+
   ctx.strokeStyle = 'rgba(0,0,0,0.1)';
   ctx.lineWidth = 2;
   roundedRectPath(7, 7, CARD_W - 14, CARD_H - 14, 50);
   ctx.stroke();
 }
 
-/* ---------------------------------------------------------------------
-   Text/shape helpers
-   --------------------------------------------------------------------- */
 function font(weight, size, family) {
   const map = { serif: 'Bodoni Moda', sans: 'Outfit', mono: 'Victor Mono' };
   const fam = state.fontsReady ? map[family] : (family === 'mono' ? 'monospace' : 'sans-serif');
@@ -735,9 +703,6 @@ function generateIdCode() {
   return `HH-GOA-${n}`;
 }
 
-/* ---------------------------------------------------------------------
-   Export / Share
-   --------------------------------------------------------------------- */
 function canvasToBlob() {
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 1.0));
 }
@@ -748,7 +713,7 @@ function buildFilename() {
 }
 
 function buildCaption() {
-  return `Built my Hacker House Goa 2026 Builder ID \u{1F334}\u{1F680}\n\n${SITE_URL}\n\n${HASHTAG} #HHGoa2026`;
+  return `Built my Hacker House Goa 2026 Builder ID \u{1F334}\u{1F680}\n\n${HASHTAG}`;
 }
 
 async function downloadCard() {
@@ -773,24 +738,17 @@ async function shareToX() {
   const text = buildCaption();
   const file = new File([blob], filename, { type: 'image/png' });
 
-  // Preferred path (works on essentially all mobile browsers): hand the
-  // actual generated image straight to the OS share sheet, pre-filled
-  // caption included, and let the person pick X. No link, no OG-image
-  // gamble — the real graphic goes out attached.
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], text });
       showToast('Shared!');
       return;
     } catch (err) {
-      if (err && err.name === 'AbortError') return; // user cancelled — do nothing
+      if (err && err.name === 'AbortError') return;
       console.warn('navigator.share failed, falling back', err);
     }
   }
 
-  // Fallback (mainly desktop browsers without file-sharing support):
-  // download the image and open a pre-filled compose window so the
-  // person can attach it manually in two clicks.
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -805,9 +763,6 @@ async function shareToX() {
   showToast('Image saved — attach it in the X tab that just opened.');
 }
 
-/* ---------------------------------------------------------------------
-   UI feedback
-   --------------------------------------------------------------------- */
 function setStatus(msg, tone) {
   statusMsg.textContent = msg;
   if (tone) statusMsg.setAttribute('data-tone', tone);
