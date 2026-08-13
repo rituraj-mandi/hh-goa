@@ -1,5 +1,20 @@
 # What changed, and why
 
+**Update:** layout was redirected mid-project to a horizontal credit-card-style
+badge (photo left, name/designation/ID/dates right, decorative scene,
+barcode) based on a reference the user liked better than the original
+vertical festival-badge layout. The sections below describe that final
+design. One honesty note: the barcode is a deliberately **decorative**
+pattern, not a real Code 128 encode. A correct Code 128 implementation
+needs an exact special-character lookup table (for the start/stop/checksum
+symbols) that isn't something to reconstruct from memory with confidence,
+and — since this is a PNG shared to social media, not a card run through
+scanning hardware — a subtly-wrong "fake real" barcode was worse than an
+honestly decorative one. Say so if a genuinely scannable version matters
+for some other use case and it's worth building properly with a tested
+library.
+
+
 Rebuilt against the actual shortlisting rubric (`HH_Goa_2026_Shortlisting_Task_Frame_ID_Generator.pdf`).
 Scope: Format B (Builder ID Card) only, executed thoroughly — both 100-scoring
 submissions picked one format and nailed it rather than splitting effort.

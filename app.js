@@ -7,10 +7,14 @@
 const BRAND = {
   ink: '#07140D',
   green: '#0B6839',
-  greenDeep: '#052213',
+  greenDeep: '#1A4A31', // dark green for header
   yellow: '#FEE101',
   pink: '#FF0080',
-  sand: '#EFEAD8',
+  sand: '#F4F5F7', // very light gray body
+  gold: '#C6A152',
+  blueText: '#1B365D',
+  bluePill: '#4A7C94',
+  grayText: '#6D7C8A',
 };
 
 const TITLES = [
@@ -25,12 +29,14 @@ const TITLES = [
 
 // Design-space card dimensions (all drawing math happens in these units;
 // the canvas backing store is supersampled at EXPORT_SCALE for crisp output).
-const CARD_W = 1080;
-const CARD_H = 1350;
+// Landscape credit-card-style badge, ~1.6:1.
+const CARD_W = 1600;
+const CARD_H = 1000;
 const EXPORT_SCALE = 2;
+const HEADER_H = 216;
 
 // Photo frame geometry within the card (design units).
-const FRAME = { x: 210, y: 258, w: 660, h: 660, r: 34 };
+const FRAME = { x: 96, y: 286, w: 360, h: 360, r: 16 };
 
 const SITE_URL = 'https://hhgoa-id-generator.vercel.app'; // ⚠️ update after deploy
 const HASHTAG = '#FrameInGoa';
@@ -49,7 +55,7 @@ const state = {
   lastPointer: null,
   fontsReady: false,
   logo: null,           // wordmark.svg image
-  stamp: null,          // goa_hindi.svg image
+  scene: null,          // decorative linework image
 };
 
 /* ---------------------------------------------------------------------
@@ -88,8 +94,8 @@ async function init() {
   setCanvasBackingStore();
 
   loadFonts(); // fire and forget; drawCard() re-checks readiness before painting text
-  state.logo = await loadImage('assets/wordmark.svg').catch(() => null);
-  state.stamp = await loadImage('assets/goa_hindi.svg').catch(() => null);
+  state.logo = await loadImage('assets/word.png').catch(() => null);
+  state.scene = await loadImage('assets/scene-linework.png').catch(() => null);
 
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
@@ -342,164 +348,330 @@ function drawCard() {
   ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0);
   ctx.clearRect(0, 0, CARD_W, CARD_H);
 
-  drawBackground();
+  // Global clip so the downloaded image has transparent rounded corners
+  ctx.save();
+  roundedRectPath(0, 0, CARD_W, CARD_H, 48);
+  ctx.clip();
+
+  drawBody();
+  drawHeader();
+  drawScene();
   drawPhoto();
-  drawLockup();
-  drawTypography();
-  drawMetaRow();
-  drawHoloSheen();
-  drawPerforation();
+  drawInfo();
+  drawFooter();
+  
+  ctx.restore(); // remove clip
+
+  drawOuterBorder();
 
   ctx.restore();
 }
 
-function drawBackground() {
-  const g = ctx.createLinearGradient(0, 0, CARD_W, CARD_H);
-  g.addColorStop(0, '#0a0a0a');
-  g.addColorStop(0.55, '#0e1712');
+/* Cream card body (brand sand tone, not stock white) */
+function drawBody() {
+  ctx.fillStyle = BRAND.sand;
+  ctx.fillRect(0, 0, CARD_W, CARD_H);
+}
+
+/* Dark green header band carrying the real logo lockup */
+function drawHeader() {
+  const g = ctx.createLinearGradient(0, 0, CARD_W, HEADER_H);
+  g.addColorStop(0, '#103322');
   g.addColorStop(1, BRAND.greenDeep);
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
+  ctx.fillRect(0, 0, CARD_W, HEADER_H);
 
-  const glow = ctx.createRadialGradient(CARD_W, 0, 0, CARD_W, 0, 900);
-  glow.addColorStop(0, 'rgba(254,225,1,0.10)');
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
+  if (state.logo && state.logo.complete && state.logo.naturalWidth) {
+    const lh = 70; 
+    const lw = lh * (state.logo.naturalWidth / state.logo.naturalHeight);
+    ctx.drawImage(state.logo, 70, (HEADER_H - lh) / 2, lw, lh);
+  } else {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = BRAND.yellow;
+    ctx.font = font(700, 46, 'serif');
+    ctx.fillText('HACKER HOUSE GOA', 70, HEADER_H / 2 + 16);
+  }
 
-  // outer badge border
-  ctx.strokeStyle = 'rgba(239,234,216,0.18)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(16, 16, CARD_W - 32, CARD_H - 32);
-  ctx.strokeStyle = BRAND.yellow;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(24, 24, CARD_W - 48, CARD_H - 48);
+  ctx.textAlign = 'right';
+  ctx.font = font(400, 32, 'sans');
+  ctx.fillStyle = '#C4D2C9';
+  ctx.fillText('BUILDER ID    ', CARD_W - 150, HEADER_H / 2 + 10);
+  ctx.font = font(600, 38, 'sans');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText('2026', CARD_W - 70, HEADER_H / 2 + 10);
+}
+
+/* Decorative linework derived from the event's own beach illustration —
+   confined to the right-hand third so it never fights with the copy. */
+function drawScene() {
+  if (!(state.scene && state.scene.complete && state.scene.naturalWidth)) return;
+  // Span across the whole bottom
+  const sceneW = CARD_W, sceneH = sceneW * (state.scene.naturalHeight / state.scene.naturalWidth);
+  ctx.save();
+  ctx.globalAlpha = 0.6;
+  ctx.drawImage(state.scene, 0, CARD_H - sceneH, sceneW, sceneH);
+  ctx.restore();
+
+  // Draw location tag at bottom right
+  ctx.textAlign = 'left';
+  const lx = 1250, ly = 900;
+  drawPin(lx, ly - 20, 16, BRAND.blueText);
+  ctx.font = font(800, 34, 'sans');
+  ctx.fillStyle = BRAND.blueText;
+  ctx.fillText('GOA - INDIA', lx + 36, ly);
+  // ctx.fillText('2026', lx + 116, ly + 32);
+}
+
+function drawPin(cx, cy, r, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI * 0.15, Math.PI * 0.85, true);
+  ctx.lineTo(cx, cy + r * 2.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = BRAND.sand;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawPhoto() {
   const { x, y, w, h, r } = FRAME;
+  const pad = 16;
+  const outX = x - pad, outY = y - pad, outW = w + pad*2, outH = h + pad*2, outR = 24;
+  
   const { sx, sy, sW, sH } = computeCrop(w, h, state.srcW, state.srcH, state.zoom, state.fx, state.fy);
 
   ctx.save();
-  roundedRectPath(x, y, w, h, r);
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = BRAND.yellow;
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 8;
+  roundedRectPath(outX, outY, outW, outH, outR);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  roundedRectPath(outX, outY, outW, outH, outR);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#D1D5DB';
   ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  roundedRectPath(x, y, w, h, r);
   ctx.clip();
   ctx.drawImage(state.source, sx, sy, sW, sH, x, y, w, h);
   ctx.restore();
 
-  // inner shadow ring for depth
   ctx.save();
   roundedRectPath(x, y, w, h, r);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#E5E7EB';
+  ctx.stroke();
+  ctx.restore();
+
+  // User icon
+  ctx.save();
+  const iconR = 28;
+  const iconX = outX + outW - 12 - iconR;
+  const iconY = outY + outH - 12 - iconR;
+  
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 4;
+  ctx.beginPath();
+  ctx.arc(iconX, iconY, iconR, 0, Math.PI * 2);
+  ctx.fillStyle = '#E8EDF2';
+  ctx.fill();
+  ctx.restore();
+  
+  ctx.beginPath();
+  ctx.arc(iconX, iconY, iconR, 0, Math.PI * 2);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = BRAND.blueText;
+  ctx.stroke();
+
+  ctx.fillStyle = BRAND.blueText;
+  ctx.beginPath();
+  ctx.arc(iconX, iconY - 6, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(iconX, iconY + 16, 15, Math.PI, 0);
+  ctx.fill();
+}
+
+function drawInfo() {
+  const left = FRAME.x + FRAME.w + 40; 
+  ctx.textAlign = 'left';
+
+  ctx.font = font(500, 22, 'sans');
+  ctx.fillStyle = BRAND.grayText;
+  ctx.fillText('NAME', left, 340);
+
+  const name = nameInput.value.trim();
+  fitText(ctx, name, 600, 60, 34, 700, 'sans');
+  ctx.fillStyle = BRAND.blueText;
+  ctx.fillText(name, left, 396);
+
+  ctx.font = font(500, 22, 'sans');
+  ctx.fillStyle = BRAND.grayText;
+  ctx.fillText('DESIGNATION', left, 446);
+
+  const role = roleInput.value.trim();
+  const pillX = left, pillY = 460, pillW = 460, pillH = 74;
+  
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 6;
+  roundedRectPath(pillX, pillY, pillW, pillH, 12);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.restore();
+
+  const pg = ctx.createLinearGradient(pillX, pillY, pillX + pillW, pillY + pillH);
+  pg.addColorStop(0, '#D4B872');
+  pg.addColorStop(0.5, '#FCECA5');
+  pg.addColorStop(1, '#C6A152');
+  ctx.fillStyle = pg;
+  ctx.fill();
+  drawCircuitTexture(pillX, pillY, pillW, pillH);
+  
+  ctx.font = font(700, 36, 'sans');
+  ctx.fillStyle = '#2B2B2B';
+  let dRole = role;
+  while (ctx.measureText(dRole).width > pillW - 40 && dRole.length > 4) dRole = dRole.slice(0, -1);
+  if (dRole !== role) dRole = dRole.trim() + '\u2026';
+  ctx.fillText(dRole, pillX + 24, pillY + pillH / 2 + 12);
+
+  const idY = 586;
+  
+  const idW = 260;
+  roundedRectPath(left, idY, idW, 76, 12);
+  ctx.fillStyle = BRAND.bluePill;
+  ctx.fill();
+  
+  ctx.font = font(500, 20, 'sans');
+  ctx.fillStyle = '#A3C6D9';
+  ctx.fillText('ID NO.', left + 20, idY + 30);
+  ctx.font = font(700, 26, 'sans');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(state.idCode || 'HH-GOA-0047', left + 20, idY + 62);
+
+  const vx = left + 300;
+  drawCalendar(vx, idY + 16, 40, BRAND.blueText);
+  ctx.font = font(500, 20, 'sans');
+  ctx.fillStyle = BRAND.grayText;
+  ctx.fillText('VALID DATES', vx + 54, idY + 32);
+  ctx.font = font(700, 26, 'sans');
+  ctx.fillStyle = BRAND.blueText;
+  ctx.fillText('28\u201331 OCT 2026', vx + 54, idY + 64);
+}
+
+function drawCircuitTexture(x, y, w, h) {
+  ctx.save();
+  roundedRectPath(x, y, w, h, 12);
   ctx.clip();
-  const inner = ctx.createLinearGradient(x, y, x, y + h);
-  inner.addColorStop(0, 'rgba(0,0,0,0.18)');
-  inner.addColorStop(0.15, 'rgba(0,0,0,0)');
-  inner.addColorStop(0.85, 'rgba(0,0,0,0)');
-  inner.addColorStop(1, 'rgba(0,0,0,0.25)');
-  ctx.fillStyle = inner;
-  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(7,20,13,0.10)';
+  ctx.lineWidth = 2;
+  const step = 34;
+  for (let cx = x + w - 40; cx < x + w + 20; cx += step) {
+    ctx.beginPath();
+    ctx.moveTo(cx, y - 10);
+    ctx.lineTo(cx, y + h * 0.4);
+    ctx.lineTo(cx - 16, y + h * 0.4 + 16);
+    ctx.lineTo(cx - 16, y + h + 10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, y + h * 0.4, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(7,20,13,0.14)';
+    ctx.fill();
+  }
   ctx.restore();
 }
 
-function drawLockup() {
-  if (state.logo && state.logo.complete && state.logo.naturalWidth) {
-    const lw = 128;
-    const lh = lw * (state.logo.naturalHeight / state.logo.naturalWidth);
-    ctx.drawImage(state.logo, (CARD_W - lw) / 2, 64, lw, lh);
-  } else {
-    ctx.textAlign = 'center';
-    ctx.fillStyle = BRAND.yellow;
-    ctx.font = font(700, 40, 'sans');
-    ctx.fillText('HACKER HOUSE GOA', CARD_W / 2, 110);
-  }
-
-  // small brand stamp near the bottom-right corner of the photo, like a hallmark
-  if (state.stamp && state.stamp.complete && state.stamp.naturalWidth) {
-    const sw = 64;
-    const sh = sw * (state.stamp.naturalHeight / state.stamp.naturalWidth);
-    const sx = FRAME.x + FRAME.w - sw + 14;
-    const sy = FRAME.y + FRAME.h - sh + 14;
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.45)';
-    ctx.shadowBlur = 10;
-    ctx.drawImage(state.stamp, sx, sy, sw, sh);
-    ctx.restore();
-  }
-}
-
-function drawTypography() {
-  const name = (nameInput.value.trim() || 'HACKER').toUpperCase();
-  const role = (roleInput.value.trim() || 'BUILDER').toUpperCase();
-
-  ctx.textAlign = 'center';
-
-  fitText(ctx, name, CARD_W - 140, 78, 40, 700, 'serif');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(name, CARD_W / 2, 980);
-
-  ctx.font = font(600, 32, 'sans');
-  ctx.fillStyle = BRAND.yellow;
-  let displayRole = role;
-  while (ctx.measureText(displayRole).width > CARD_W - 160 && displayRole.length > 4) {
-    displayRole = displayRole.slice(0, -1);
-  }
-  if (displayRole !== role) displayRole = displayRole.trim() + '\u2026';
-  ctx.fillText(displayRole, CARD_W / 2, 1028);
-
-  // builder title pill
-  const label = `< ${state.title} />`;
-  ctx.font = font(700, 27, 'mono');
-  const tw = ctx.measureText(label).width;
-  const padX = 34, padY = 20;
-  const pillW = tw + padX * 2, pillH = padY * 2 + 6;
-  const pillX = (CARD_W - pillW) / 2, pillY = 1058;
-
-  ctx.fillStyle = 'rgba(11,104,57,0.45)';
-  ctx.strokeStyle = BRAND.green;
-  ctx.lineWidth = 2;
-  roundedRectPath(pillX, pillY, pillW, pillH, pillH / 2);
-  ctx.fill();
+function drawCalendar(x, y, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  roundedRectPath(x, y + size * 0.15, size, size * 0.85, 6);
   ctx.stroke();
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(label, CARD_W / 2, pillY + pillH / 2 + 9);
+  
+  // top loops
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.25, y);
+  ctx.lineTo(x + size * 0.25, y + size * 0.3);
+  ctx.moveTo(x + size * 0.75, y);
+  ctx.lineTo(x + size * 0.75, y + size * 0.3);
+  ctx.stroke();
+  
+  // horizontal line
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.45);
+  ctx.lineTo(x + size, y + size * 0.45);
+  ctx.stroke();
+  
+  // dots
+  ctx.fillStyle = color;
+  const dotR = 2.5;
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 3; col++) {
+       ctx.beginPath();
+       ctx.arc(x + size * 0.22 + col * size * 0.28, y + size * 0.65 + row * size * 0.22, dotR, 0, Math.PI*2);
+       ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 
-function drawMetaRow() {
-  const y1 = CARD_H - 96;
-  const y2 = CARD_H - 66;
-
+function drawFooter() {
+  const barcodeY = 850; // Align with GOA-INDIA text block
+  
+  // Builder title chip midway between profile pic and barcode
+  const label = `< ${state.title} />`;
+  ctx.font = font(800, 40, 'mono');
+  ctx.fillStyle = BRAND.grayText;
   ctx.textAlign = 'left';
-  ctx.font = font(600, 30, 'sans');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('HACKER HOUSE GOA', 60, y1);
-  ctx.fillStyle = BRAND.yellow;
-  const w1 = ctx.measureText('HACKER HOUSE GOA ').width;
-  ctx.fillText('2026', 60 + w1, y1);
+  ctx.fillText(label, 100, 780);
 
-  ctx.textAlign = 'right';
-  ctx.font = font(400, 20, 'mono');
-  ctx.fillStyle = 'rgba(244,241,232,0.85)';
-  ctx.fillText(`ID: ${state.idCode}`, CARD_W - 60, y1);
-  ctx.fillText('VALID: 28\u201331 OCT 2026', CARD_W - 60, y2);
+  drawBarcode(100, barcodeY, 300, 60, state.idCode);
 
-  drawBarcode(60, y2 - 14, 300, 22, state.idCode);
+  ctx.font = font(500, 22, 'mono');
+  ctx.fillStyle = '#1B365D';
+  ctx.textAlign = 'left';
+  // Pulling barcode string right below the barcode image
+  ctx.fillText(digitStringFor(state.idCode), 120, barcodeY + 85);
 }
 
 function drawBarcode(x, y, w, h, seed) {
   let s = hashSeed(seed || 'HHGOA');
   let cx = x;
   ctx.save();
-  ctx.fillStyle = 'rgba(244,241,232,0.55)';
+  ctx.fillStyle = BRAND.ink;
   while (cx < x + w) {
     s = (s * 1103515245 + 12345) & 0x7fffffff;
-    const barW = 1 + (s % 3);
-    if (s % 5 !== 0) ctx.fillRect(cx, y, barW, h);
+    const barW = 1 + (s % 4);
+    if (s % 7 !== 0) ctx.fillRect(cx, y, barW, h);
     cx += barW + 2;
   }
   ctx.restore();
+}
+
+function digitStringFor(seed) {
+  let s = hashSeed(seed || 'HHGOA');
+  let out = '';
+  for (let i = 0; i < 13; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    out += s % 10;
+    if (i === 0 || i === 5) out += ' ';
+  }
+  return out;
 }
 
 function hashSeed(str) {
@@ -508,37 +680,18 @@ function hashSeed(str) {
   return Math.abs(h) || 1;
 }
 
-// A soft diagonal foil/holographic sheen — the thing that reads as
-// "laminated event badge" rather than "flat PNG with text on it".
-function drawHoloSheen() {
-  ctx.save();
-  ctx.globalCompositeOperation = 'overlay';
-  const g = ctx.createLinearGradient(0, 0, CARD_W, CARD_H);
-  g.addColorStop(0.32, 'rgba(255,255,255,0)');
-  g.addColorStop(0.42, 'rgba(255,255,255,0.30)');
-  g.addColorStop(0.48, 'rgba(255,0,128,0.22)');
-  g.addColorStop(0.55, 'rgba(254,225,1,0.28)');
-  g.addColorStop(0.65, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
-  ctx.restore();
-}
-
-// Real die-cut ticket-stub notches along the left edge — punched through
-// to true transparency so it reads correctly on any background.
-function drawPerforation() {
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  const r = 9, start = 46, end = CARD_H - 46, step = 48;
-  for (let y = start; y <= end; y += step) {
-    ctx.beginPath();
-    ctx.arc(0, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(CARD_W, y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
+function drawOuterBorder() {
+  // Thick gold border
+  ctx.strokeStyle = '#C6A152'; // Gold
+  ctx.lineWidth = 8;
+  roundedRectPath(3, 3, CARD_W - 6, CARD_H - 6, 50);
+  ctx.stroke();
+  
+  // Inner thin border
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 2;
+  roundedRectPath(7, 7, CARD_W - 14, CARD_H - 14, 50);
+  ctx.stroke();
 }
 
 /* ---------------------------------------------------------------------
